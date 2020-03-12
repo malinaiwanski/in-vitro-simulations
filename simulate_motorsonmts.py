@@ -12,7 +12,7 @@ import numpy as np
 
 #parameters
 mt_length = 1000
-nstep = 1000
+nstep = 100000
 
 #rates of reactions
 k_fwd = 0.01 #steps per sec
@@ -31,7 +31,7 @@ alpha_max = 0.0001 #change in k_on at site of motor
 #assume this drops exponentially with number of sites away from motor and with time
 
 
-def gillespie(mt, affinity, t, m): #update time and state vectors (mt and affinity at site m)
+def gillespie(X, affinity, t, m): #update time and state vectors (mt and affinity at site m)
    
     #generate random numbers
     rt = np.random.random()
@@ -48,16 +48,26 @@ def gillespie(mt, affinity, t, m): #update time and state vectors (mt and affini
         j += 1
 		
     t += tau #update time
-    mt[i,m] += nu[j] #update state
-    if m < mt_length-1 and mt[m+1] == 0 and j == 0:
-        mt[m+1] -= nu[j] #update state of +1 site for forward step
-    if m >  0 and mt[m-1] == 0 and j == 1:
-         mt[m+1] -= nu[j] #update state of -1 site for back step
+    X[m] += nu[j] #update state
+    if m < mt_length-1 and X[m+1] == 0 and j == 0:
+        X[m+1] -= nu[j] #update state of +1 site for forward step
+    if m >  0 and X[m-1] == 0 and j == 1:
+         X[m+1] -= nu[j] #update state of -1 site for back step
     
-    affinity[m] += alpha_max #update affinity
-    #add to update of surrounding sites
-    affinity[affinity<0] = k_on
+    #call update affinity here
+    return X, affinity, t
 
+def affinity_update(aff, X): #update affinity based on motor positions
+    aff[X==1] = alpha_max #update affinity
+    motor_loc = np.where(X==1)
+    for j in range(0,mt_length):
+        while motor_loc+j<mt_length-1:
+            aff[motor_loc+j] = alpha_max*np.exp(-j)
+        while motor_loc-j>=0:
+            aff[motor_loc-j] = alpha_max*np.exp(-j)
+    #add to update of surrounding sites
+    aff[aff<0] = k_on
+    return aff
     
 #initialize
 mt = np.zeros((nstep,mt_length))
@@ -65,8 +75,7 @@ affinity = np.zeros((nstep,mt_length))
 affinity[:] = k_on
 t = np.zeros(nstep)
 
-
-for i in range(0,nstep-1):
+for i in range(0,nstep-2):
     #choose MT lattice site
     m = np.random.randint(0,mt_length-1)
     #check current possible reactions
@@ -79,4 +88,4 @@ for i in range(0,nstep-1):
         k_tot = np.sum(k)
         nu = [0, 0, nu_on, 0]
     #run Gillespie
-    mt[i+1,m],affinity[i+1,m],t[i+1] = gillespie(mt[i,m],affinity[i,m],t[i],m)
+    mt[i+1,:],affinity[i+1,:],t[i+1] = gillespie(mt[i,:],affinity[i,:],t[i],m)
